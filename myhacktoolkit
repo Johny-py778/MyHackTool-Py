@@ -1,0 +1,188 @@
+import os
+os.system("cls")
+os.system("echo off")
+print("Team : Antickers")
+print("status: em desenvolvimento")
+print("""
+  _       _                  _____           _   
+ | | ___ | |__  _ __  _   _ |_   _|___  ___ | |_ 
+ | |/ _ \| '_ \| '_ \| | | |  | | / _ \/ __|| __|
+ | | (_) | | | | | | | |_| |  | ||  __/\__ \| |_ 
+ |_|\___/|_| |_|_| |_|\__, |  |_| \___||___/ \__|
+                      |___/                      
+""")
+print("O script foi iniciado!")
+input("Press any key: ")
+
+import mainfiglet
+import socket
+import argparse
+import sys
+import time
+import requests as req
+
+# --- CONSTANTES PADRÃO ---
+WORDLIST_DIRETORIOS_PADRAO = "common.txt"
+WORDLIST_SUBDOMINIOS_PADRAO = "subdomains-10000.txt"
+Descricao="""
+Ferramenta Unificada de Reconhecimento (Subdomínios e Diretórios).
+Criado pela antickers
+Github: github.com/johnytest778
+Gmail: johnytesst751@gmail
+Webpage: antickers.com"""
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "DNT": "1",
+    "Upgrade-Insecure-Requests": "1"
+}
+
+# --- MÓDULO 1: SUBDOMÍNIOS (DNS) ---
+def dns_lookup(domain, subdomain):
+    full_domain = f"{subdomain.strip()}.{domain}"
+    try:
+        ip = socket.gethostbyname(full_domain)
+        return full_domain, ip
+    except socket.gaierror:
+        return None
+
+def run_subdomains(domain, wordlist_path):
+    print(f"[*] Alvo: {domain}")
+    print(f"[*] Wordlist Subdomínios: {wordlist_path}\n")
+    failed = 0
+
+    try:
+        with open(wordlist_path, "r", encoding="utf-8") as file:
+            for line in file:
+                sub = line.strip()
+                if not sub or sub.startswith("#"):
+                    continue
+
+                result = dns_lookup(domain, sub)
+                if result:
+                    print(f"[+] {result[0]} -> {result[1]}")
+                else:
+                    failed += 1
+    except FileNotFoundError:
+        print(f"[-] Erro: Wordlist não encontrada em '{wordlist_path}'")
+        return
+    except KeyboardInterrupt:
+        print("\n[!] Operação interrompida.")
+
+    print(f"\n[*] {failed} subdomínios não resolveram DNS.")
+
+# --- MÓDULO 2: DIRETÓRIOS (HTTP) ---
+def get_baseline(base_url):
+    try:
+        resp = req.head(base_url, timeout=5, headers=HEADERS)
+        return len(resp.text)
+    except req.exceptions.RequestException:
+        return None
+
+def test_directory(base_url, directory, baseline_size=None):
+    try:
+        url = f"{base_url.rstrip('/')}/{directory.strip().lstrip('/')}"
+        resp = req.head(url, headers=HEADERS, timeout=5, allow_redirects=False)
+
+        if resp.status_code in (200, 301, 302, 403):
+            return {"status": resp.status_code, "url": url, "size": len(resp.text), "custom_404": False}
+
+        if resp.status_code == 404:
+            size = len(resp.text)
+            is_custom = baseline_size is not None and abs(size - baseline_size) > 50
+            return {"status": 404, "url": url, "size": size, "custom_404": is_custom}
+
+        return None
+    except req.exceptions.RequestException:
+        return None
+
+def run_directories(base_url, wordlist_path):
+    if not base_url.startswith(("http://", "https://")):
+        base_url = f"https://{base_url}"
+
+    baseline_size = get_baseline(base_url)
+    if baseline_size is None:
+        print("[-] Não foi possível acessar o host.")
+        return
+
+    print(f"[*] Host: {base_url}")
+    print(f"[*] Baseline: {baseline_size} bytes")
+    print(f"[*] Wordlist Diretórios: {wordlist_path}\n")
+    failed = 0
+
+    try:
+        with open(wordlist_path, "r", encoding="utf-8") as file:
+            for line in file:
+                directory = line.strip()
+                if not directory or directory.startswith("#"):
+                    continue
+
+                result = test_directory(base_url, directory, baseline_size)
+                if result is None:
+                    failed += 1
+                    continue
+
+                if result["status"] == 404:
+                    if result["custom_404"]:
+                        print(f"[!] {result['url']} -> 404 (Custom 404, size={result['size']})")
+                else:
+                    print(f"[+] {result['url']} -> {result['status']} (size={result['size']})")
+                
+                time.sleep(0.1)
+    except FileNotFoundError:
+        print(f"[-] Erro: Wordlist não encontrada em '{wordlist_path}'")
+        return
+    except KeyboardInterrupt:
+        print("\n[!] Operação interrompida.")
+
+    print(f"\n[*] {failed} requisições falharam.")
+
+# --- ENTRADA PRINCIPAL ---
+def main():
+    parser = argparse.ArgumentParser(
+        description=Descricao
+    )
+    
+    # Define o argumento posicional obrigatório (o alvo)
+    parser.add_argument("target", help="O domínio ou URL alvo (ex: exemplo.com ou https://exemplo.com)")
+    
+    # Cria um grupo mutuamente exclusivo (obriga a escolher apenas UM modo)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--sub", action="store_true", help="Executa varredura de subdomínios (DNS)")
+    group.add_argument("--dir", action="store_true", help="Executa varredura de diretórios (HTTP)")
+    
+    # Parâmetro opcional para definir uma wordlist customizada
+    parser.add_argument("-w", "--wordlist", help="Caminho para uma wordlist personalizada")
+
+    # Se nenhum argumento for passado, exibe a ajuda automaticamente
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+
+    args = parser.parse_args()
+
+    # Define qual wordlist usar (se o usuário não passou -w, usa o padrão do modo escolhido)
+    if args.sub:
+        w_list = args.wordlist if args.wordlist else WORDLIST_SUBDOMINIOS_PADRAO
+        print("[*] Iniciando Pesquisa de Subdomínios...")
+        run_subdomains(args.target, w_list)
+        
+    elif args.dir:
+        w_list = args.wordlist if args.wordlist else WORDLIST_DIRETORIOS_PADRAO
+        print("[*] Iniciando Pesquisa de Diretórios...")
+        run_directories(args.target, w_list)
+
+if __name__ == "__main__":
+    main()
+
