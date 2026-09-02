@@ -105,6 +105,6 @@ Este projeto está licenciado sob a **Licença Pública Geral GNU v3.0 (GPLv3)**
 * **Condições:** O código-fonte original e todas as modificações devem ser disponibilizados publicamente sob a mesma licença GPLv3. As alterações feitas no código devem ser documentadas.
 * **Limitações:** O software é fornecido "como está", sem garantias de qualquer tipo por parte do autor.
 
-Para ler a licença completa e detalhada, consulte o ficheiro [LICENSE](LICENSE)
+Para ler a licença completa e detalhada, consulte o ficheiro [LICENSE]
 
 ⭐ Se este projeto te ajudou em seus estudos de segurança, considere deixar uma estrela no repositório!
